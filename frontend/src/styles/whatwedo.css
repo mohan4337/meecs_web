@@ -1,309 +1,53 @@
-/* General Reset */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/* ================= WHAT WE DO ================= */
 
-body {
-  font-family: 'Segoe UI', sans-serif;
-  background-color: #f5f7fa;
-  color: #333;
-}
-
-/* ========================
-   Our Markets Section
-======================== */
 .markets {
-  padding: 60px 20px;
-  background-color: #ffffff;
+  padding: 40px 20px;
   text-align: center;
-}
-
-.markets h2 {
-  font-size: 36px;
-  margin-bottom: 40px;
-  color: #4b3f72;;
 }
 
 .market-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 30px;
+  grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
+  gap: 20px;
   max-width: 1200px;
-  margin: 0 auto;
+  margin: auto;
 }
 
 .market-card {
-  background-color: #fafafa;
-  border-radius: 12px;
+  background: #fafafa;
+  border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  transition: transform 0.2s;
-  text-align: center;
-}
-
-.market-card:hover {
-  transform: translateY(-5px);
 }
 
 .market-card img {
   width: 100%;
-  height: 160px;
+  height: 150px;
   object-fit: cover;
 }
 
-.market-card h3 {
-  font-size: 18px;
-  margin: 15px 0 10px;
-}
-
-.market-card a {
-  display: inline-block;
-  margin-bottom: 15px;
-  color: #6d47c8;
-  text-decoration: none;
-  font-weight: 500;
-}
-
-.power-generation-section {
-  position: relative;
-  width: 100%;
-  max-height: 600px;
-  overflow: hidden;
-}
-
-.background-image {
-  width: 100%;
-  height: 1000px;
-  display: block;
-}
-
-.overlay-text {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: #000000cc;
-  color: white;
-  padding: 12px 24px;
-  font-size: 20px;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-radius: 6px;
-}
-
-.icon {
-  font-size: 24px;
-}
-
-/* ========================
-   Powerplant Features Section
-======================== */
 .powerplant {
-  padding: 60px 20px;
-  background-color: #f0f2f5;
-}
-
-.powerplant .hero {
-  text-align: center;
-  margin-bottom: 50px;
-}
-
-.powerplant .hero h1 {
-  font-size: 36px;
-  color: #4b3f72;
-  margin-bottom: 10px;
-}
-
-.powerplant .hero p {
-  font-size: 18px;
-  color: #555;
+  padding: 40px 20px;
 }
 
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 30px;
-  max-width: 1200px;
-  margin: 0 auto;
+  grid-template-columns: repeat(auto-fit,minmax(240px,1fr));
+  gap: 20px;
 }
 
-.feature-card {
-  background-color: #fff;
-  padding: 25px;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-  transition: transform 0.2s;
-}
+/* MOBILE */
+@media (max-width: 768px) {
 
-.feature-card:hover {
-  transform: translateY(-5px);
-}
+  .market-grid,
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
 
-.feature-card h3 {
-  color: #333;
-  font-size: 20px;
-  margin-bottom: 10px;
-}
+  .powerplant h1 {
+    font-size: 24px;
+  }
 
-.feature-card p {
-  font-size: 15px;
-  color: #666;
-}/* General Reset */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: 'Segoe UI', sans-serif;
-  background-color: #f5f7fa;
-  color: #333;
-}
-
-/* ========================
-   Our Markets Section
-======================== */
-.markets {
-  padding: 60px 20px;
-  background-color: #ffffff;
-  text-align: center;
-}
-
-.markets h2 {
-  font-size: 36px;
-  margin-bottom: 40px;
-  color: #4b3f72;;
-}
-
-.market-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 30px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.market-card {
-  background-color: #fafafa;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  transition: transform 0.2s;
-  text-align: center;
-}
-
-.market-card:hover {
-  transform: translateY(-5px);
-}
-
-.market-card img {
-  width: 100%;
-  height: 160px;
-  object-fit: cover;
-}
-
-.market-card h3 {
-  font-size: 18px;
-  margin: 15px 0 10px;
-}
-
-.market-card a {
-  display: inline-block;
-  margin-bottom: 15px;
-  color: #6d47c8;
-  text-decoration: none;
-  font-weight: 500;
-}
-
-.power-generation-section {
-  position: relative;
-  width: 100%;
-  max-height: 600px;
-  overflow: hidden;
-}
-
-.background-image {
-  width: 100%;
-  height: 1000px;
-  display: block;
-}
-
-.overlay-text {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: #000000cc;
-  color: white;
-  padding: 12px 24px;
-  font-size: 20px;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-radius: 6px;
-}
-
-.icon {
-  font-size: 24px;
-}
-
-/* ========================
-   Powerplant Features Section
-======================== */
-.powerplant {
-  padding: 60px 20px;
-  background-color: #f0f2f5;
-}
-
-.powerplant .hero {
-  text-align: center;
-  margin-bottom: 50px;
-}
-
-.powerplant .hero h1 {
-  font-size: 36px;
-  color: #4b3f72;
-  margin-bottom: 10px;
-}
-
-.powerplant .hero p {
-  font-size: 18px;
-  color: #555;
-}
-
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 30px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.feature-card {
-  background-color: #fff;
-  padding: 25px;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-  transition: transform 0.2s;
-}
-
-.feature-card:hover {
-  transform: translateY(-5px);
-}
-
-.feature-card h3 {
-  color: #333;
-  font-size: 20px;
-  margin-bottom: 10px;
-}
-
-.feature-card p {
-  font-size: 15px;
-  color: #666;
+  .powerplant p {
+    font-size: 14px;
+  }
 }
