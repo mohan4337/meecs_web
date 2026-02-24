@@ -21,15 +21,27 @@ const app = express();
 // Middleware
 app.use(express.json());
 
-// CORS
+// ✅ FIXED CORS
 const allowedOrigins = [
   "http://localhost:3000",
   "https://meecs-web-tgma.vercel.app",
+  "https://meecs-web.vercel.app",
+  "https://www.middleeastengg.com",
+  "https://middleeastengg.com"
 ];
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true); // allow Postman
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("CORS not allowed by server"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
   })
 );
