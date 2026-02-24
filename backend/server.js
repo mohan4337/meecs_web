@@ -3,7 +3,7 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 
 // ===============================
-// ✅ LOAD ENV FIRST (VERY IMPORTANT)
+// LOAD ENV FIRST
 // ===============================
 dotenv.config();
 
@@ -17,7 +17,7 @@ const connectDB = require("./config/db");
 // ===============================
 const userRoutes = require("./routes/userRoutes");
 const chatRoutes = require("./routes/chatRoutes");
-const contactRoutes = require("./routes/contactRoutes"); // ✅ NEW
+const contactRoutes = require("./routes/contactRoutes");
 
 // ===============================
 // Connect MongoDB
@@ -31,45 +31,61 @@ const app = express();
 // ===============================
 app.use(express.json());
 
+// ✅ FIXED CORS (Production + Local)
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://meecs-web-tgma.vercel.app",  // 🔥 your frontend domain
+];
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
   })
 );
+
+app.options("*", cors());
 
 // ===============================
 // API Routes
 // ===============================
 app.use("/api/users", userRoutes);
 app.use("/api/chat", chatRoutes);
-app.use("/api/contact", contactRoutes); // ✅ NEW CONTACT ROUTE
+app.use("/api/contact", contactRoutes);
 
 // ===============================
-// Health Check Route
+// Health Check
 // ===============================
 app.get("/", (req, res) => {
-  res.status(200).send("🚀 MERN Backend + Chatbot + Contact API Running");
+  res.status(200).send("🚀 Backend Running Successfully");
 });
 
 // ===============================
-// Handle Unknown Routes
+// 404 Handler
 // ===============================
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found" });
 });
 
 // ===============================
-// Global Error Handler (Optional but Professional)
+// Global Error Handler
 // ===============================
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error("Server Error:", err.message);
   res.status(500).json({ message: "Server Error" });
 });
 
 // ===============================
-// Server Start
+// Server Start (Important for Vercel)
 // ===============================
 const PORT = process.env.PORT || 5000;
 
