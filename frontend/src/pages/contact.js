@@ -2,6 +2,9 @@ import React, { useState, useEffect } from "react";
 import "../styles/contact.css";
 import { useNavigate } from "react-router-dom";
 
+// API Base URL from .env
+const API = process.env.REACT_APP_API_URL;
+
 const ContactUs = () => {
   const navigate = useNavigate();
 
@@ -23,6 +26,7 @@ const ContactUs = () => {
   const [messages, setMessages] = useState([
     { sender: "bot", text: "Hi! Ask me anything about power plants." },
   ]);
+
   const [input, setInput] = useState("");
 
   // ===============================
@@ -43,7 +47,7 @@ const ContactUs = () => {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/contact/send", {
+      const res = await fetch(`${API}/api/contact/send`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -53,8 +57,9 @@ const ContactUs = () => {
 
       const data = await res.json();
 
-      if (data.success) {
+      if (res.ok && data.success) {
         alert("✅ Message sent successfully!");
+
         setFormData({
           name: "",
           mobile: "",
@@ -65,6 +70,7 @@ const ContactUs = () => {
         alert("❌ Failed to send message.");
       }
     } catch (error) {
+      console.error("Contact Error:", error);
       alert("⚠️ Server error. Please try again later.");
     }
 
@@ -83,7 +89,7 @@ const ContactUs = () => {
     setInput("");
 
     try {
-      const res = await fetch("http://localhost:5000/api/chat/ask", {
+      const res = await fetch(`${API}/api/chat/ask`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -93,11 +99,17 @@ const ContactUs = () => {
 
       const data = await res.json();
 
-      setMessages((prev) => [
-        ...prev,
-        { sender: "bot", text: data.reply },
-      ]);
+      if (res.ok) {
+        setMessages((prev) => [
+          ...prev,
+          { sender: "bot", text: data.reply || "No response" },
+        ]);
+      } else {
+        throw new Error("Chat API failed");
+      }
     } catch (error) {
+      console.error("Chat Error:", error);
+
       setMessages((prev) => [
         ...prev,
         {
@@ -118,8 +130,10 @@ const ContactUs = () => {
 
         if (href.startsWith("#")) {
           e.preventDefault();
+
           const targetId = href.substring(1);
           const targetElement = document.getElementById(targetId);
+
           if (targetElement) {
             window.scrollTo({
               top: targetElement.offsetTop - 50,
@@ -149,8 +163,10 @@ const ContactUs = () => {
       {/* ================= HERO SECTION ================= */}
       <section className="hero-section">
         <div className="overlay"></div>
+
         <div className="hero-content">
           <h1>Contact Us</h1>
+
           <p>
             <a href="/home">Home</a> » <span>Contact Us</span>
           </p>
@@ -164,19 +180,23 @@ const ContactUs = () => {
           {/* Contact Info */}
           <div className="contact-info">
             <h3>Contact Information</h3>
+
             <h1>Feel Free To Get In Touch</h1>
+
             <p>
               At MMSR, a vision driven by innovation, precision, and resilience
               across mechanical, civil, electrical, and communication engineering.
             </p>
 
             <h3 className="city">Dubai</h3>
+
             <p>
               📫 Email:{" "}
               <a href="mailto:mmenggservice@gmail.com">
                 mmenggservice@gmail.com
               </a>
             </p>
+
             <p>📱 Mobile: +91 123456789</p>
             <p>📱 Mobile: +91 8778269597</p>
             <p>📱 Mobile: +971 545313855</p>
@@ -189,6 +209,7 @@ const ContactUs = () => {
 
             <form onSubmit={handleSubmit}>
               <div className="input-group">
+
                 <input
                   type="text"
                   name="name"
@@ -206,6 +227,7 @@ const ContactUs = () => {
                   onChange={handleChange}
                   required
                 />
+
               </div>
 
               <input
@@ -225,17 +247,20 @@ const ContactUs = () => {
                 required
               ></textarea>
 
-              <button type="submit" className="quote-btn" disabled={loading}>
+              <button type="submit" disabled={loading}>
                 {loading ? "Sending..." : "Submit Your Enquiry"}
               </button>
+
             </form>
           </div>
+
         </div>
       </section>
 
-      {/* ================= MAP SECTION ================= */}
+      {/* ================= MAP ================= */}
       <div className="map-section">
         <h2>Our Location</h2>
+
         <iframe
           title="MMSR Location"
           src="https://www.google.com/maps?q=25.678525,55.786082&z=15&output=embed"
@@ -247,17 +272,24 @@ const ContactUs = () => {
 
       {/* ================= CHATBOT ================= */}
       <div className="chatbot-container">
-        <div className="chat-header">Power Plant Chatbot</div>
+
+        <div className="chat-header">
+          Power Plant Chatbot
+        </div>
 
         <div className="chat-window">
           {messages.map((msg, index) => (
-            <div key={index} className={`message ${msg.sender}`}>
+            <div
+              key={index}
+              className={`message ${msg.sender}`}
+            >
               {msg.text}
             </div>
           ))}
         </div>
 
         <div className="chat-input">
+
           <input
             type="text"
             value={input}
@@ -265,7 +297,11 @@ const ContactUs = () => {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
           />
-          <button onClick={handleSend}>Send</button>
+
+          <button onClick={handleSend}>
+            Send
+          </button>
+
         </div>
       </div>
     </div>
