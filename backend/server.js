@@ -2,10 +2,10 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 
-// Load env
+// Load Environment Variables
 dotenv.config();
 
-// Database
+// Database Connection
 const connectDB = require("./config/db");
 
 // Routes
@@ -13,15 +13,20 @@ const userRoutes = require("./routes/userRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 
-// Connect DB
+// Connect Database
 connectDB();
 
 const app = express();
 
-// ================= MIDDLEWARE =================
+// =============================
+// MIDDLEWARE
+// =============================
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// ================= CORS =================
+// =============================
+// ALLOWED ORIGINS
+// =============================
 const allowedOrigins = [
   "http://localhost:3000",
   "https://meecs-web-tgma.vercel.app",
@@ -30,58 +35,71 @@ const allowedOrigins = [
   "https://middleeastengg.com",
 ];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
+// =============================
+// CORS CONFIG
+// =============================
+const corsOptions = {
+  origin: function (origin, callback) {
 
-      // Allow requests with no origin (Postman/mobile apps)
-      if (!origin) {
-        return callback(null, true);
-      }
+    // Allow requests with no origin
+    // (Postman, mobile apps, server-to-server)
+    if (!origin) {
+      return callback(null, true);
+    }
 
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("CORS blocked"));
-      }
-    },
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    return callback(new Error("CORS Policy Error"));
+  },
 
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-    ],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 
-    credentials: true,
-  })
-);
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+  ],
 
-// Handle preflight
-app.options("*", cors());
+  credentials: true,
+};
 
-// ================= ROUTES =================
+// Apply CORS
+app.use(cors(corsOptions));
+
+// Handle OPTIONS preflight requests
+app.options("*", cors(corsOptions));
+
+// =============================
+// ROUTES
+// =============================
 app.use("/api/users", userRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/contact", contactRoutes);
 
-// ================= HEALTH CHECK =================
+// =============================
+// ROOT ROUTE
+// =============================
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "Backend Running",
+    message: "🚀 Backend Running Successfully",
   });
 });
 
-// ================= ERROR HANDLER =================
+// =============================
+// ERROR HANDLER
+// =============================
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error("SERVER ERROR:", err);
 
   res.status(500).json({
     success: false,
-    message: err.message || "Server Error",
+    message: err.message || "Internal Server Error",
   });
 });
 
-// Export for Vercel
+// =============================
+// EXPORT FOR VERCEL
+// =============================
 module.exports = app;
