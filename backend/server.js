@@ -2,6 +2,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const mongoose = require("mongoose");
+const helmet = require("helmet");
 
 dotenv.config();
 
@@ -81,18 +82,66 @@ app.use(async (req, res, next) => {
 });
 
 // =================================
-// SECURITY HEADERS
+// SECURITY HEADERS WITH HELMET
 // =================================
+
+// Detect environment type
+const isVercelPreview = process.env.VERCEL_URL && process.env.VERCEL_URL.includes('vercel.app');
+const isProduction = process.env.NODE_ENV === 'production';
+const isCustomDomain = process.env.CUSTOM_DOMAIN === 'true' || 
+                      (process.env.FRONTEND_URL && !process.env.VERCEL_URL);
+
+// Helmet base configuration - disable conflicting headers we'll set manually
+app.use(helmet({
+  contentSecurityPolicy: false,      // We'll set CSP manually with frame-ancestors
+  crossOriginEmbedderPolicy: false,  // May break video/audio embeds
+  frameguard: false,                 // We'll set X-Frame-Options manually
+  hidePoweredBy: true,              // Hide Express header
+  hsts: process.env.NODE_ENV === 'production' ? {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: false
+  } : false,
+}));
+
+// Custom security headers with conditional iframe support
 app.use((req, res, next) => {
+  // Standard security headers
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('X-DNS-Prefetch-Control', 'off');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  // Determine framing policy based on environment
   
-  if (process.env.NODE_ENV === 'production') {
+  // 1. Vercel Preview (vercel.app subdomain) - allow iframe embedding
+  //    This fixes Vercel dashboard preview 403
+  if (isVercelPreview && !isCustomDomain) {
+    // Allow all framing for Vercel dashboard preview
+    res.setHeader('X-Frame-Options', 'ALLOWALL');
+    // Modern CSP equivalent - allow any site to embed
+    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+  }
+  // 2. Production with custom domain - strict protection
+  else if (isProduction && isCustomDomain) {
+    // Only allow same-origin framing (protects against clickjacking)
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    // CSP frame-ancestors restriction
+    const frontendUrl = process.env.FRONTEND_URL || 'https://www.middleeastengg.com';
+    res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${frontendUrl}`);
+  }
+  // 3. Development/localhost - permissive for testing
+  else {
+    // Development: allow all (easier debugging)
+    res.setHeader('X-Frame-Options', 'ALLOWALL');
+    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+  }
+
+  // HSTS already handled by helmet, but ensure it's set in production
+  if (isProduction && !isVercelPreview) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
-  
+
   next();
 });
 
