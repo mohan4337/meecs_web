@@ -3,7 +3,7 @@ import "../styles/contact.css";
 import { useNavigate } from "react-router-dom";
 
 // API Base URL from .env
-const API = process.env.REACT_APP_API_URL;
+const API = process.env.REACT_APP_API_URL?.replace(/\/$/, "");
 
 const ContactUs = () => {
   const navigate = useNavigate();

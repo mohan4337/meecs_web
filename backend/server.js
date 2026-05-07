@@ -14,38 +14,44 @@ connectDB();
 
 const app = express();
 
-// ================== MIDDLEWARE ==================
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// ================== CORS ==================
+// =================================
+// CORS FIX
+// =================================
+
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://meecs-web.vercel.app",
-  "https://meecs-web-4fvv.vercel.app",
-  "https://meecs-web-tgma.vercel.app",
   "https://www.middleeastengg.com",
-  "https://middleeastengg.com",
+  
+  "https://meecs-web.vercel.app",
 ];
 
 app.use((req, res, next) => {
+
   const origin = req.headers.origin;
 
   if (allowedOrigins.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Origin", origin);
   }
 
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
-
-  res.header(
+  res.setHeader(
     "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
+    "GET,POST,PUT,DELETE,OPTIONS"
   );
 
-  res.header("Access-Control-Allow-Credentials", "true");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization"
+  );
 
+  res.setHeader(
+    "Access-Control-Allow-Credentials",
+    "true"
+  );
+
+  // Handle preflight
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
   }
@@ -53,20 +59,21 @@ app.use((req, res, next) => {
   next();
 });
 
-// ALSO USE CORS PACKAGE
-app.use(
-  cors({
-    origin: allowedOrigins,
-    credentials: true,
-  })
-);
+// Optional cors middleware
+app.use(cors());
 
-// ================== ROUTES ==================
+// =================================
+// ROUTES
+// =================================
+
 app.use("/api/users", userRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/contact", contactRoutes);
 
-// ================== HEALTH ==================
+// =================================
+// HEALTH CHECK
+// =================================
+
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
@@ -74,13 +81,16 @@ app.get("/", (req, res) => {
   });
 });
 
-// ================== ERROR ==================
+// =================================
+// ERROR HANDLER
+// =================================
+
 app.use((err, req, res, next) => {
   console.error(err);
 
   res.status(500).json({
     success: false,
-    message: "Server Error",
+    message: err.message || "Server Error",
   });
 });
 
