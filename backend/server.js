@@ -18,51 +18,70 @@ connectDB();
 
 const app = express();
 
-// Middleware
+// ================= MIDDLEWARE =================
 app.use(express.json());
 
-// ✅ FIXED CORS
+// ================= CORS =================
 const allowedOrigins = [
   "http://localhost:3000",
   "https://meecs-web-tgma.vercel.app",
   "https://meecs-web.vercel.app",
   "https://www.middleeastengg.com",
-  "https://middleeastengg.com"
+  "https://middleeastengg.com",
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true); // allow Postman
+
+      // Allow requests with no origin (Postman/mobile apps)
+      if (!origin) {
+        return callback(null, true);
+      }
 
       if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
+        callback(null, true);
       } else {
-        return callback(new Error("CORS not allowed by server"));
+        callback(new Error("CORS blocked"));
       }
     },
+
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+    ],
+
     credentials: true,
   })
 );
 
+// Handle preflight
 app.options("*", cors());
 
-// Routes
+// ================= ROUTES =================
 app.use("/api/users", userRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/contact", contactRoutes);
 
-// Health
+// ================= HEALTH CHECK =================
 app.get("/", (req, res) => {
-  res.status(200).send("🚀 Backend Running");
+  res.status(200).json({
+    success: true,
+    message: "Backend Running",
+  });
 });
 
-// Error handler
+// ================= ERROR HANDLER =================
 app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(500).json({ message: "Server Error" });
+  console.error(err.stack);
+
+  res.status(500).json({
+    success: false,
+    message: err.message || "Server Error",
+  });
 });
 
-// ❌ DO NOT USE app.listen ON VERCEL
+// Export for Vercel
 module.exports = app;
