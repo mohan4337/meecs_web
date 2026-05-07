@@ -1,9 +1,14 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import "../styles/contact.css";
 import { useNavigate } from "react-router-dom";
+import { getApiClient, getChatApiClient, startKeepAlive, stopKeepAlive } from "../utils/apiClient";
 
 // API Base URL from .env
 const API = process.env.REACT_APP_API_URL?.replace(/\/+$/, "");
+
+// Initialize API client
+let apiClient = null;
+let chatApiClient = null;
 
 const ContactUs = () => {
   const navigate = useNavigate();
@@ -22,10 +27,10 @@ const ContactUs = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   
-  // Use ref to track if component is mounted (prevent state updates after unmount)
+  // Refs to prevent issues
   const isMounted = useRef(true);
-  // Use ref to prevent duplicate submissions
   const isSubmitting = useRef(false);
+  const retryCount = useRef(0);
 
   // ===============================
   // CHATBOT STATES
@@ -35,15 +40,67 @@ const ContactUs = () => {
   ]);
 
   const [input, setInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
 
   // ===============================
-  // CLEANUP ON UNMOUNT
+  // INITIALIZE API CLIENT & KEEP-ALIVE
   // ===============================
   useEffect(() => {
+    if (API) {
+      apiClient = getApiClient(API);
+      chatApiClient = getChatApiClient(API);
+      
+      // Start keep-alive pings to prevent cold starts
+      startKeepAlive(API, 60000); // Ping every 60 seconds
+    }
+
     return () => {
       isMounted.current = false;
+      stopKeepAlive();
     };
   }, []);
+
+  // ===============================
+  // GET USER-FRIENDLY ERROR MESSAGE
+  // ===============================
+  const getErrorMessage = (err) => {
+    if (!err) return "An unknown error occurred";
+
+    // Handle AbortError (timeout)
+    if (err.name === 'AbortError' || err.code === 'TIMEOUT') {
+      return "Request timed out. The server took too long to respond. Please try again.";
+    }
+
+    // Network errors
+    if (err.code === 'NETWORK_ERROR' || 
+        err.message?.includes('Failed to fetch') || 
+        err.message?.includes('NetworkError')) {
+      return "Network error. Please check your internet connection and try again.";
+    }
+
+    // CORS errors
+    if (err.code === 'CORS_ERROR' || err.message?.includes('CORS')) {
+      return "Connection blocked. Please refresh the page and try again.";
+    }
+
+    // Server errors (5xx)
+    if (err.status >= 500) {
+      return "Server is currently unavailable. Please try again in a few moments.";
+    }
+
+    // Validation errors (4xx)
+    if (err.status === 400) {
+      return err.data?.message || "Invalid request. Please check your input.";
+    }
+
+    // Rate limit
+    if (err.status === 429) {
+      return "Too many requests. Please wait a moment before trying again.";
+    }
+
+    // Default - use server message if available
+    return err.message || "Something went wrong. Please try again.";
+  };
 
   // ===============================
   // HANDLE CONTACT INPUT CHANGE
@@ -57,12 +114,12 @@ const ContactUs = () => {
     
     // Clear error when user starts typing
     if (error) {
-      setTimeout(() => setError(null), 300);
+      setError(null);
     }
   };
 
   // ===============================
-  // HANDLE CONTACT SUBMIT - OPTIMIZED
+  // HANDLE CONTACT SUBMIT - WITH RETRY
   // ===============================
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -71,46 +128,38 @@ const ContactUs = () => {
     if (isSubmitting.current || loading) {
       return;
     }
-    
-    // Validate form data before making request
+
+    // Validation
     const validationErrors = [];
-    
-    if (!formData.name?.trim()) {
-      validationErrors.push("Name is required");
-    }
-    if (!formData.mobile?.trim()) {
-      validationErrors.push("Mobile number is required");
-    }
+    if (!formData.name?.trim()) validationErrors.push("Name is required");
+    if (!formData.mobile?.trim()) validationErrors.push("Mobile is required");
     if (!formData.email?.trim()) {
       validationErrors.push("Email is required");
     } else {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(formData.email)) {
-        validationErrors.push("Please enter a valid email address");
+        validationErrors.push("Invalid email format");
       }
     }
     if (!formData.message?.trim()) {
       validationErrors.push("Message is required");
     } else if (formData.message.length > 2000) {
-      validationErrors.push("Message is too long. Maximum 2000 characters allowed.");
+      validationErrors.push("Message exceeds 2000 character limit");
     }
-    
+
     if (validationErrors.length > 0) {
       setError(validationErrors[0]);
       return;
     }
 
-    // Set loading state and lock submission
+    // Lock submission
     isSubmitting.current = true;
     setLoading(true);
     setError(null);
     setSuccess(false);
+    retryCount.current = 0;
 
     try {
-      // Prepare the request
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
       const requestBody = {
         name: formData.name.trim(),
         mobile: formData.mobile.trim(),
@@ -118,41 +167,17 @@ const ContactUs = () => {
         message: formData.message.trim()
       };
 
-      const response = await fetch(`${API}/api/contact/send`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-        // Additional fetch options
-        keepalive: true, // Keep connection alive for potential retry
-        cache: "no-store" // Don't cache POST requests
+      const result = await apiClient.post('/api/contact/send', requestBody, {
+        retries: 2, // Retry up to 2 times on server errors
+        timeout: 30000
       });
 
-      clearTimeout(timeoutId);
-
-      // Check if response is ok (status 200-299)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({
-          message: `Server responded with ${response.status}: ${response.statusText}`
-        }));
-        
-        throw new Error(errorData.message || `HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
+      if (result.success && result.data?.success) {
         // Success! Reset form
-        setFormData({
-          name: "",
-          mobile: "",
-          email: "",
-          message: "",
-        });
+        setFormData({ name: "", mobile: "", email: "", message: "" });
         setSuccess(true);
-        
+        retryCount.current = 0;
+
         // Clear success message after 5 seconds
         setTimeout(() => {
           if (isMounted.current) {
@@ -160,26 +185,25 @@ const ContactUs = () => {
           }
         }, 5000);
       } else {
-        throw new Error(data.message || "Request failed");
+        throw new Error(result.data?.message || "Request failed");
       }
 
     } catch (err) {
       console.error("Contact Submit Error:", err);
       
-      // Handle different error types
-      if (err.name === 'AbortError' || err.message.includes('timeout')) {
-        setError("Request timeout. Please check your internet connection and try again.");
-      } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-        setError("Network error. Please check your connection and try again.");
-      } else if (err.message.includes('CORS')) {
-        setError("CORS error. Please contact support if this persists.");
-      } else if (err.message.includes('Server')) {
-        setError("Server is busy. Please try again in a few moments.");
-      } else {
-        setError(err.message || "Failed to send message. Please try again.");
+      // Increment retry count for tracking
+      retryCount.current += 1;
+
+      // Show appropriate error message
+      const errorMessage = getErrorMessage(err);
+      setError(errorMessage);
+
+      // If it's a network error and first attempt, we already retried via apiClient
+      // Show a hint to user
+      if (err.code === 'NETWORK_ERROR' && retryCount.current >= 2) {
+        setError(prev => `${prev} (Please check if the backend server is running)`);
       }
     } finally {
-      // Always reset loading state and unlock submission
       if (isMounted.current) {
         setLoading(false);
         isSubmitting.current = false;
@@ -188,69 +212,62 @@ const ContactUs = () => {
   };
 
   // ===============================
-  // CHATBOT SEND MESSAGE - OPTIMIZED
+  // CHATBOT SEND MESSAGE - WITH RETRY
   // ===============================
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
+  const handleSend = useCallback(async () => {
+    if (!input.trim() || chatLoading) return;
 
     const userText = input.trim();
 
     setMessages((prev) => [...prev, { sender: "user", text: userText }]);
     setInput("");
+    setChatLoading(true);
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const result = await chatApiClient.post('/api/chat/ask', 
+        { message: userText },
+        {
+          retries: 1, // Quick retry for chat
+          timeout: 15000
+        }
+      );
 
-      const res = await fetch(`${API}/api/chat/ask`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ message: userText }),
-        signal: controller.signal,
-        keepalive: true,
-        cache: "no-store"
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.reply || `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      if (data.reply && !data.error) {
+      if (result.success && result.data?.reply && !result.data.error) {
         setMessages((prev) => [
           ...prev,
-          { sender: "bot", text: data.reply },
+          { sender: "bot", text: result.data.reply },
         ]);
       } else {
-        throw new Error(data.reply || "No response from AI");
+        throw new Error(result.data?.reply || "No response from AI");
       }
 
-    } catch (error) {
-      console.error("Chat Error:", error);
+    } catch (err) {
+      console.error("Chat Error:", err);
       
       let errorText = "⚠️ Server error. Please try again later.";
-      if (error.name === 'AbortError') {
-        errorText = "⚠️ Request timeout. Please try again.";
-      } else if (error.message.includes('network') || error.message.includes('fetch')) {
-        errorText = "⚠️ Connection error. Check your internet.";
+      
+      if (err.code === 'TIMEOUT') {
+        errorText = "⚠️ AI assistant took too long. Try a shorter question.";
+      } else if (err.code === 'NETWORK_ERROR') {
+        errorText = "⚠️ Connection error. Check internet and retry.";
+      } else if (err.status === 429) {
+        errorText = "⚠️ Rate limit reached. Please wait a moment.";
+      } else if (err.status === 503) {
+        errorText = "⚠️ AI service unavailable. Please try again later.";
       }
 
       setMessages((prev) => [
         ...prev,
         { sender: "bot", text: errorText },
       ]);
+    } finally {
+      setChatLoading(false);
     }
-  };
+  }, [input, chatLoading]);
 
   // Handle keypress for chat
   const handleKeyPress = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !chatLoading) {
       e.preventDefault();
       handleSend();
     }
@@ -266,10 +283,8 @@ const ContactUs = () => {
 
         if (href.startsWith("#")) {
           e.preventDefault();
-
           const targetId = href.substring(1);
           const targetElement = document.getElementById(targetId);
-
           if (targetElement) {
             window.scrollTo({
               top: targetElement.offsetTop - 50,
@@ -300,10 +315,8 @@ const ContactUs = () => {
       {/* ================= HERO SECTION ================= */}
       <section className="hero-section">
         <div className="overlay"></div>
-
         <div className="hero-content">
           <h1>Contact Us</h1>
-
           <p>
             <a href="/home">Home</a> » <span>Contact Us</span>
           </p>
@@ -317,22 +330,13 @@ const ContactUs = () => {
           {/* Contact Info */}
           <div className="contact-info">
             <h3>Contact Information</h3>
-
             <h1>Feel Free To Get In Touch</h1>
-
             <p>
               At MMSR, a vision driven by innovation, precision, and resilience
               across mechanical, civil, electrical, and communication engineering.
             </p>
-
             <h3 className="city">Dubai</h3>
-
-            <p>
-              📫 Email:{" "}
-              <a href="mailto:mmenggservice@gmail.com">
-                mmenggservice@gmail.com
-              </a>
-            </p>
+            <p>📫 Email: <a href="mailto:mmenggservice@gmail.com">mmenggservice@gmail.com</a></p>
             <p>📱 Mobile: +91 123456789</p>
             <p>📱 Mobile: +91 8778269597</p>
             <p>📱 Mobile: +971 545313855</p>
@@ -352,12 +356,17 @@ const ContactUs = () => {
                   padding: '10px', 
                   backgroundColor: '#ffe6e6', 
                   borderRadius: '5px',
-                  animation: 'slideIn 0.3s ease'
+                  animation: 'slideIn 0.3s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
                 }}
               >
-                ⚠️ {error}
+                <span>⚠️</span>
+                <span>{error}</span>
               </div>
             )}
+            
             {success && (
               <div 
                 className="success-message" 
@@ -367,10 +376,14 @@ const ContactUs = () => {
                   padding: '10px', 
                   backgroundColor: '#e6ffe6', 
                   borderRadius: '5px',
-                  animation: 'slideIn 0.3s ease'
+                  animation: 'slideIn 0.3s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
                 }}
               >
-                ✅ Message sent successfully! We'll get back to you soon.
+                <span>✅</span>
+                <span>Message sent successfully! We'll get back to you soon.</span>
               </div>
             )}
 
@@ -386,7 +399,6 @@ const ContactUs = () => {
                   disabled={loading}
                   aria-label="Name"
                 />
-
                 <input
                   type="tel"
                   name="mobile"
@@ -427,7 +439,8 @@ const ContactUs = () => {
                 style={{
                   opacity: loading ? 0.7 : 1,
                   cursor: loading ? 'not-allowed' : 'pointer',
-                  position: 'relative'
+                  position: 'relative',
+                  transition: 'opacity 0.2s ease'
                 }}
               >
                 {loading ? (
@@ -447,7 +460,6 @@ const ContactUs = () => {
                   "Submit Your Enquiry"
                 )}
               </button>
-
             </form>
           </div>
 
@@ -457,7 +469,6 @@ const ContactUs = () => {
       {/* ================= MAP ================= */}
       <div className="map-section">
         <h2>Our Location</h2>
-
         <iframe
           title="MMSR Location"
           src="https://www.google.com/maps?q=25.678525,55.786082&z=15&output=embed"
@@ -470,7 +481,6 @@ const ContactUs = () => {
 
       {/* ================= CHATBOT ================= */}
       <div className="chatbot-container">
-
         <div className="chat-header">
           Power Plant Chatbot
         </div>
@@ -484,6 +494,15 @@ const ContactUs = () => {
               {msg.text}
             </div>
           ))}
+          {chatLoading && (
+            <div className="message bot">
+              <span style={{ display: 'inline-flex', gap: '4px' }}>
+                <span>●</span>
+                <span>●</span>
+                <span>●</span>
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="chat-input">
@@ -493,20 +512,20 @@ const ContactUs = () => {
             placeholder="Ask about power plants..."
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyPress}
-            disabled={loading}
+            disabled={chatLoading}
           />
           <button 
             onClick={handleSend}
-            disabled={loading || !input.trim()}
+            disabled={chatLoading || !input.trim()}
             style={{
-              opacity: (loading || !input.trim()) ? 0.5 : 1,
-              cursor: (loading || !input.trim()) ? 'not-allowed' : 'pointer'
+              opacity: (chatLoading || !input.trim()) ? 0.5 : 1,
+              cursor: (chatLoading || !input.trim()) ? 'not-allowed' : 'pointer',
+              transition: 'opacity 0.2s ease'
             }}
           >
-            Send
+            {chatLoading ? '...' : 'Send'}
           </button>
         </div>
-
       </div>
     </div>
   );

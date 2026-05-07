@@ -1,7 +1,7 @@
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
-const mongoose = require("mongoose"); // For DB status check
+const mongoose = require("mongoose");
 
 dotenv.config();
 
@@ -13,6 +13,31 @@ const contactRoutes = require("./routes/contactRoutes");
 // Middleware
 const rateLimit = require("./middleware/rateLimit");
 const logger = require("./middleware/logger");
+
+// Track DB connection state
+let isDbConnected = false;
+let connectionPromise = null;
+
+// Initialize DB connection early
+const initDB = async () => {
+  if (connectionPromise) {
+    return connectionPromise;
+  }
+  
+  connectionPromise = connectDB().then(() => {
+    isDbConnected = true;
+    console.log("✅ Database ready");
+  }).catch((err) => {
+    console.error("❌ Database connection failed:", err.message);
+    isDbConnected = false;
+    // Don't throw - allow server to start and retry on first request
+  });
+  
+  return connectionPromise;
+};
+
+// Start connection immediately
+initDB();
 
 const app = express();
 
@@ -34,6 +59,26 @@ app.use(express.urlencoded({
 // REQUEST LOGGING
 // =================================
 app.use(logger);
+
+// =================================
+// DATABASE CONNECTION GUARANTEE
+// =================================
+app.use(async (req, res, next) => {
+  // For API routes, ensure DB is connected
+  if (req.path.startsWith('/api/') || req.path === '/') {
+    if (!isDbConnected) {
+      console.log('DB not connected yet, waiting for connection...');
+      try {
+        await connectionPromise;
+        isDbConnected = true;
+      } catch (error) {
+        console.error('DB connection failed:', error.message);
+        // Continue anyway - routes may not need DB (e.g., chat uses external API)
+      }
+    }
+  }
+  next();
+});
 
 // =================================
 // SECURITY HEADERS
@@ -77,11 +122,13 @@ const corsOptions = {
       callback(null, false);
     }
   },
-  credentials: true,
+  credentials: false, // Set to true only if using cookies/auth
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin'],
-  exposedHeaders: ['Content-Length', 'X-Total-Count'],
-  maxAge: 86400
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'X-Request-ID', 'X-Total-Count'],
+  maxAge: 86400, // 24 hours
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 };
 
 // Enable CORS for all routes
@@ -136,9 +183,20 @@ app.get("/", (req, res) => {
   });
 });
 
-// Warmup endpoint for Vercel
-app.get("/_vercel/warmup", (req, res) => {
-  res.status(200).send("OK");
+// Warmup endpoint for Vercel - triggers DB connection
+app.get("/_vercel/warmup", async (req, res) => {
+  try {
+    if (!isDbConnected) {
+      await connectionPromise;
+    }
+    res.status(200).json({
+      status: "warm",
+      timestamp: new Date().toISOString(),
+      db: mongoose.connection.readyState === 1 ? "connected" : "disconnected"
+    });
+  } catch (error) {
+    res.status(200).send("OK"); // Still return 200 for Vercel
+  }
 });
 
 // Status endpoint with DB check
@@ -150,7 +208,8 @@ app.get("/api/status", (req, res) => {
       status: isConnected ? "ok" : "degraded",
       timestamp: new Date().toISOString(),
       db: isConnected ? "connected" : "disconnected",
-      uptime: process.uptime()
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development'
     });
   } catch (error) {
     res.status(500).json({
