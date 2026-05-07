@@ -3,7 +3,7 @@ import "../styles/contact.css";
 import { useNavigate } from "react-router-dom";
 
 // API Base URL from .env
-const API = process.env.REACT_APP_API_URL?.replace(/\/$/, "");
+const API = process.env.REACT_APP_API_URL?.replace(/\/+$/, "");
 
 const ContactUs = () => {
   const navigate = useNavigate();
@@ -19,6 +19,8 @@ const ContactUs = () => {
   });
 
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(false);
 
   // ===============================
   // CHATBOT STATES
@@ -45,6 +47,38 @@ const ContactUs = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
+    setSuccess(false);
+
+    // Client-side validation
+    if (!formData.name.trim()) {
+      setError("Name is required");
+      setLoading(false);
+      return;
+    }
+    if (!formData.mobile.trim()) {
+      setError("Mobile number is required");
+      setLoading(false);
+      return;
+    }
+    if (!formData.email.trim()) {
+      setError("Email is required");
+      setLoading(false);
+      return;
+    }
+    if (!formData.message.trim()) {
+      setError("Message is required");
+      setLoading(false);
+      return;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError("Please enter a valid email address");
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(`${API}/api/contact/send`, {
@@ -58,8 +92,7 @@ const ContactUs = () => {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        alert("✅ Message sent successfully!");
-
+        setSuccess(true);
         setFormData({
           name: "",
           mobile: "",
@@ -67,11 +100,11 @@ const ContactUs = () => {
           message: "",
         });
       } else {
-        alert("❌ Failed to send message.");
+        setError(data.message || "Failed to send message. Please try again.");
       }
     } catch (error) {
       console.error("Contact Error:", error);
-      alert("⚠️ Server error. Please try again later.");
+      setError("Server error. Please try again later.");
     }
 
     setLoading(false);
@@ -196,7 +229,6 @@ const ContactUs = () => {
                 mmenggservice@gmail.com
               </a>
             </p>
-
             <p>📱 Mobile: +91 123456789</p>
             <p>📱 Mobile: +91 8778269597</p>
             <p>📱 Mobile: +971 545313855</p>
@@ -206,6 +238,9 @@ const ContactUs = () => {
           {/* Contact Form */}
           <div className="contact-form">
             <h1>Drop Us A Message</h1>
+
+            {error && <div className="error-message" style={{color: 'red', marginBottom: '15px', padding: '10px', backgroundColor: '#ffe6e6', borderRadius: '5px'}}>{error}</div>}
+            {success && <div className="success-message" style={{color: 'green', marginBottom: '15px', padding: '10px', backgroundColor: '#e6ffe6', borderRadius: '5px'}}>✅ Message sent successfully! We'll get back to you soon.</div>}
 
             <form onSubmit={handleSubmit}>
               <div className="input-group">

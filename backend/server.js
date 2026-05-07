@@ -10,57 +10,56 @@ const userRoutes = require("./routes/userRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 
+// Connect to MongoDB
 connectDB();
 
 const app = express();
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
 
 // =================================
-// CORS FIX
+// CORS CONFIGURATION
 // =================================
 
 const allowedOrigins = [
   "http://localhost:3000",
+  "http://localhost:3001", 
   "https://www.middleeastengg.com",
-  
+  "https://middleeastengg.com",
   "https://meecs-web.vercel.app",
 ];
 
-app.use((req, res, next) => {
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-  const origin = req.headers.origin;
-
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET,POST,PUT,DELETE,OPTIONS"
-  );
-
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization"
-  );
-
-  res.setHeader(
-    "Access-Control-Allow-Credentials",
-    "true"
-  );
-
-  // Handle preflight
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-
-  next();
-});
-
-// Optional cors middleware
-app.use(cors());
+// Handle preflight requests
+app.options('*', cors());
 
 // =================================
 // ROUTES
@@ -78,6 +77,19 @@ app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
     message: "Backend Running",
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// =================================
+// 404 HANDLER
+// =================================
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.url} not found`
   });
 });
 
@@ -86,11 +98,18 @@ app.get("/", (req, res) => {
 // =================================
 
 app.use((err, req, res, next) => {
-  console.error(err);
+  console.error('[Error]', err.message);
+  console.error('[Stack]', err.stack);
 
-  res.status(500).json({
+  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  
+  res.status(statusCode).json({
     success: false,
-    message: err.message || "Server Error",
+    message: err.message || "Internal Server Error",
+    ...(process.env.NODE_ENV === 'development' && { 
+      stack: err.stack,
+      error: err.message 
+    })
   });
 });
 
