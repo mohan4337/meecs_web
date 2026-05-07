@@ -1,63 +1,81 @@
 const express = require("express");
-const nodemailer = require("nodemailer");
 const Contact = require("../models/Contact");
+const getTransporter = require("../utils/transporter");
+const retry = require("../utils/retry");
 
 const router = express.Router();
 
+// Request timeout middleware
+const timeout = (ms) => (req, res, next) => {
+  if (!res.headersSent) {
+    setTimeout(() => {
+      if (!res.headersSent) {
+        res.status(504).json({
+          success: false,
+          message: "Request timeout - server is busy, please try again",
+        });
+      }
+    }, ms);
+  }
+  next();
+};
+
+router.use(timeout(30000));
+
 router.post("/send", async (req, res) => {
+  const { name, mobile, email, message } = req.body;
+
+  // ==========================
+  // VALIDATION
+  // ==========================
+  if (!name || !name.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: "Name is required",
+    });
+  }
+
+  if (!mobile || !mobile.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: "Mobile number is required",
+    });
+  }
+
+  if (!email || !email.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: "Email is required",
+    });
+  }
+
+  // Email format validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({
+      success: false,
+      message: "Please enter a valid email address",
+    });
+  }
+
+  if (!message || !message.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: "Message is required",
+    });
+  }
+
+  // Message length check
+  if (message.length > 2000) {
+    return res.status(400).json({
+      success: false,
+      message: "Message is too long. Maximum 2000 characters allowed.",
+    });
+  }
+
   try {
-    const { name, mobile, email, message } = req.body;
-
     // ==========================
-    // VALIDATION
-    // ==========================
-    if (!name || !name.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Name is required",
-      });
-    }
-
-    if (!mobile || !mobile.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Mobile number is required",
-      });
-    }
-
-    if (!email || !email.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is required",
-      });
-    }
-
-    // Email format validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Please enter a valid email address",
-      });
-    }
-
-    if (!message || !message.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Message is required",
-      });
-    }
-
-    // Message length check
-    if (message.length > 2000) {
-      return res.status(400).json({
-        success: false,
-        message: "Message is too long. Maximum 2000 characters allowed.",
-      });
-    }
-
-    // ==========================
-    // SAVE TO MONGODB
+    // SAVE TO MONGODB WITH RETRY
     // ==========================
     const newContact = new Contact({
       name: name.trim(),
@@ -66,49 +84,35 @@ router.post("/send", async (req, res) => {
       message: message.trim(),
     });
 
-    await newContact.save();
+    // Save with retry logic for transient DB failures
+    await retry(
+      () => newContact.save(),
+      {
+        maxAttempts: 3,
+        minDelay: 100,
+        maxDelay: 500,
+        onRetry: (err, attempt) => {
+          console.log(`DB save retry attempt ${attempt}: ${err.message}`);
+        }
+      }
+    );
 
     // ==========================
-    // CHECK EMAIL ENV
+    // CHECK EMAIL TRANSPORTER
     // ==========================
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.warn("Email credentials not configured. Contact saved but email not sent.");
-      
-      // Still return success even if email is not configured
+    const transporter = getTransporter();
+
+    if (!transporter) {
+      console.warn("Email transporter not available, skipping email send");
       return res.status(200).json({
         success: true,
-        message: "Message sent successfully (email notification skipped)",
+        message: "Message sent successfully!",
+        note: "Email notification skipped - server configuration",
       });
     }
 
     // ==========================
-    // CREATE TRANSPORTER
-    // ==========================
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-
-    // ==========================
-    // VERIFY TRANSPORTER
-    // ==========================
-    try {
-      await transporter.verify();
-    } catch (verifyError) {
-      console.error("Email transporter verification failed:", verifyError.message);
-      
-      // Still return success - message was saved
-      return res.status(200).json({
-        success: true,
-        message: "Message sent successfully (email notification failed)",
-      });
-    }
-
-    // ==========================
-    // MAIL OPTIONS
+    // SEND EMAIL WITH RETRY
     // ==========================
     const mailOptions = {
       from: `"MMSR Website" <${process.env.EMAIL_USER}>`,
@@ -140,10 +144,18 @@ router.post("/send", async (req, res) => {
       `,
     };
 
-    // ==========================
-    // SEND EMAIL
-    // ==========================
-    await transporter.sendMail(mailOptions);
+    // Send with retry for transient failures
+    await retry(
+      () => transporter.sendMail(mailOptions),
+      {
+        maxAttempts: 2,
+        minDelay: 200,
+        maxDelay: 1000,
+        onRetry: (err, attempt) => {
+          console.log(`Email send retry attempt ${attempt}: ${err.message}`);
+        }
+      }
+    );
 
     // ==========================
     // SUCCESS RESPONSE
@@ -157,10 +169,29 @@ router.post("/send", async (req, res) => {
     console.error("Contact Route Error:", error.message);
     console.error("Stack trace:", error.stack);
 
-    return res.status(500).json({
+    // Determine error type
+    let errorMessage = "Server error while processing your request. Please try again later.";
+    let statusCode = 500;
+
+    if (error.message.includes("timeout") || error.message.includes("Timeout")) {
+      errorMessage = "Server is busy. Please try again in a moment.";
+      statusCode = 504;
+    } else if (error.message.includes("Database") || error.message.includes("ECONNREFUSED")) {
+      errorMessage = "Database connection error. Please try again later.";
+      statusCode = 503;
+    } else if (error.message.includes("Email") || error.message.includes("mail")) {
+      // Email failed but message saved
+      errorMessage = "Message saved but email notification failed.";
+      statusCode = 200; // Still success for the user
+    }
+
+    return res.status(statusCode).json({
       success: false,
-      message: "Server error while processing your request. Please try again later.",
-      ...(process.env.NODE_ENV === 'development' && { error: error.message })
+      message: errorMessage,
+      ...(process.env.NODE_ENV === 'development' && { 
+        error: error.message,
+        stack: error.stack 
+      })
     });
   }
 });
