@@ -2,104 +2,86 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 
-// Load Environment Variables
 dotenv.config();
 
-// Database Connection
 const connectDB = require("./config/db");
 
-// Routes
 const userRoutes = require("./routes/userRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 
-// Connect Database
 connectDB();
 
 const app = express();
 
-// =============================
-// MIDDLEWARE
-// =============================
+// ================== MIDDLEWARE ==================
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// =============================
-// ALLOWED ORIGINS
-// =============================
+// ================== CORS ==================
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://meecs-web-tgma.vercel.app",
   "https://meecs-web.vercel.app",
+  "https://meecs-web-4fvv.vercel.app",
+  "https://meecs-web-tgma.vercel.app",
   "https://www.middleeastengg.com",
   "https://middleeastengg.com",
 ];
 
-// =============================
-// CORS CONFIG
-// =============================
-const corsOptions = {
-  origin: function (origin, callback) {
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
 
-    // Allow requests with no origin
-    // (Postman, mobile apps, server-to-server)
-    if (!origin) {
-      return callback(null, true);
-    }
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
 
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
 
-    return callback(new Error("CORS Policy Error"));
-  },
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, OPTIONS"
+  );
 
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  res.header("Access-Control-Allow-Credentials", "true");
 
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-  ],
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
 
-  credentials: true,
-};
+  next();
+});
 
-// Apply CORS
-app.use(cors(corsOptions));
+// ALSO USE CORS PACKAGE
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+  })
+);
 
-// Handle OPTIONS preflight requests
-app.options("*", cors(corsOptions));
-
-// =============================
-// ROUTES
-// =============================
+// ================== ROUTES ==================
 app.use("/api/users", userRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/contact", contactRoutes);
 
-// =============================
-// ROOT ROUTE
-// =============================
+// ================== HEALTH ==================
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "🚀 Backend Running Successfully",
+    message: "Backend Running",
   });
 });
 
-// =============================
-// ERROR HANDLER
-// =============================
+// ================== ERROR ==================
 app.use((err, req, res, next) => {
-  console.error("SERVER ERROR:", err);
+  console.error(err);
 
   res.status(500).json({
     success: false,
-    message: err.message || "Internal Server Error",
+    message: "Server Error",
   });
 });
 
-// =============================
-// EXPORT FOR VERCEL
-// =============================
 module.exports = app;
