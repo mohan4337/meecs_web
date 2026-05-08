@@ -1,14 +1,19 @@
-# https://www.robotstxt.org/robotstxt.html
+# robots.txt for Middle East Engineering
+
 User-agent: *
 Allow: /
 
-# Sitemap
+# Sitemap location
 Sitemap: https://www.middleeastengg.com/sitemap.xml
 
-# Crawl directives
+# Optional crawl delay
 Crawl-delay: 10
 
-# Block sensitive paths (if any)
+# Block unnecessary/private folders
 Disallow: /test/
 Disallow: /temp/
 Disallow: /admin/
+
+# Allow important assets
+Allow: /assets/
+Allow: /images/
