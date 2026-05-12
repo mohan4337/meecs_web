@@ -8,6 +8,7 @@ import Contact from "./pages/contact";
 import Header from "./components/navbar";
 import Footer from "./components/footer";
 import PageTitle from "./components/PageTitle";
+import ScrollToTop from "./components/ScrollToTop";
 
 const App = () => {
   return (
@@ -22,6 +23,7 @@ const AppContent = () => {
   
   return (
     <>
+      <ScrollToTop />
       <PageTitle pathname={location.pathname} />
       <Header />
       <main>
